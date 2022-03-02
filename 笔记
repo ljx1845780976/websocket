@@ -1,0 +1,36 @@
+一、介绍：WebSocket是一种在单个TCP连接上的全双工通讯协议，是Http协议的更高级。
+         当客户端与服务端建立socket连接后，
+         它允许服务端主动推送消息给客户端，客户端也可以主动推送消息给服务端。
+二、实现：
+    (1)后端实现：
+       ①后端的websocket中的endpoint是一个java对象，代表websocket连接的后端，
+        就像http与servlet一样。在websocket中，每一个客户端都会生成一个新的endpoint类与
+        之建立连接，这与controller类不一样。
+       ②创建一个ChatEndpoint类，写上注解@ServerEndpoint("chat"),表示其是一个基本的endpoint类,
+        用他来实现后端websocket的功能。其中还要创建WebSocketConfig、GetHttpSessionConfigurator两个类来使endpoint类完整。
+       ③创建三个基本方法并加上对应的注解完成相应功能：@onOpen、@onMessage、@onClose
+        Ⅰ、@onOpen：当客户端调用其websocket对象.onopen方法，
+                     发起与服务端进行websocket连接成功时，调用该方法。
+        Ⅱ、@onMessage：当客户端调用其websocket对象.send方法，
+                     发送消息给服务器时，调用该方法并获取客户端的消息。
+        Ⅲ、@onClose：当客户端断开与服务端的websocket连接时，调用该方法。
+       ④建立websocket后，服务端与客户端会生成一个不同于httpSession的，供websocket用
+        的session，该session在@onOpen方法的参数中，当双方连接成功后，@onOpen方法创建
+        该session，此前先为endpoint类定义一个私有的Session成员，并在@onOpen方法内将
+        该session赋值给当前endpoint对象的此前先为endpoint类定义一个私有的Session成员
+        即可完成endpoint的session赋值。
+       ⑤使用当前endpoint对象的session.getBasicRemote()方法获取basicRemote，并调用
+        basicRemote.sendText(object)方法将object推送到客户端，完成服务端对客户端的消息推送。
+
+    (2)前端实现：
+       ①创建websocket对象即可完成与服务端的连接：var ws=new webSocket(url);
+        其中url格式为：ws://ip:port/xxx,其中xxx为后端@ServerEndpoint("xxx")中的值。
+       ②创建websocket对象的六个方法：
+        Ⅰ、ws.onopen方法：两端连接时执行该方法。
+        Ⅱ、ws.onmessage方法：当服务端调用basicRemote.sendText(object)方法时，执行
+                             该方法，通过该方法的参数获取到object。
+        Ⅲ、ws.onclose方法：双方断开连接时执行该方法。
+        Ⅳ、ws.error方法：双方连接异常时，该方法执行。
+        -----------------注意：以上四个方法都是被动执行的--------------------------
+        Ⅴ、ws.send(str)：客户端主动调用该方法向服务端发送字符串消息。
+        Ⅵ、ws.close()：客户端主动调用该方法即可主动与服务端断开连接。

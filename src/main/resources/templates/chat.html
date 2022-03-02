@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en"  xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>聊天室</title>
+    <link type="text/css" rel="stylesheet" th:href="@{/css/chat.css}">
+</head>
+<body>
+<div id="app">
+  <h1 align="center">聊天室</h1>
+    <a href="/">首页</a>
+    <div >
+        当前用户：{{cur_username}}
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        状态:
+        <span  id="curr_username">
+        </span>
+        <button id="on" @click="open" hidden="hidden">登录</button>
+        <button id="off" @click="close">注销</button>
+    </div>
+    <div id="chatMeu" style="background-color: darkgrey"></div>
+    <!--聊天界面-->
+    <div id="chatBody">
+        <div id="chatMain" >
+            <!--聊天展示区域-->
+            <div id="chatCnt">
+            </div>
+            <div id="chatArea" >
+                <textarea id="tex_content" placeholder="请输入文字！"></textarea>
+                <input id="submit" @click="send" type="button" value="发送"  >
+            </div>
+        </div>
+        <!--右侧-->
+        <div id="lists" >
+            <!--好友列表-->
+            <div>
+                <ul style="background-color: darkgrey">好友列表(请点击好友聊天)</ul>
+                <ul id="friendsList">
+<!--                    <li><a  @click="chooseFriend(f)">{{f}}</a></li>-->
+                </ul>
+            </div>
+            <hr>
+            <!--系统消息区-->
+            <div>
+                <ul style="background-color: darkgrey">系统通知</ul>
+                <ul id="broadcastList">
+                    <!--<li>Lili在线</li>-->
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+
+<script type="text/javascript" th:src="@{/js/jquery.js}"></script>
+<script th:src="@{/js/vue.min.js}"></script>
+<script th:src="@{/js/axios.min.js}"></script>
+
+<script>
+
+    var to_username;
+    var curr_username;
+    showChat=function(username){
+        to_username=username
+        $("#chatWith").css("display","inline").text("正在和 "+username+" 聊天")
+        $('#p1').remove();
+        $('#chatMeu').append('<p id="p1" style="text-align: center">正在和<b style="color: #db41ca ">' + username + '</b>聊天</p>');
+        $('#chatMain').css("display", "inline");
+    };
+    chooseFriend=function(username) {
+        showChat(username);
+        $("#chatCnt").html("");
+        //当点击聊天人列表时，需要获与之对应的聊天记录，聊天记录存放在sessionStorage中
+        var chatData=sessionStorage.getItem(username)
+        if (chatData != null) {
+            //渲染聊天数据到聊天区
+            $("#chatCnt").html(chatData);
+        }
+    };
+    sessionSaveChat=function (username,cnt) {
+        var chatData = sessionStorage.getItem(username);
+        if(chatData!=null){
+            cnt=chatData+cnt;
+        }
+        sessionStorage.setItem(username,cnt);
+    }
+    new Vue({
+        el: '#app',
+        data: {
+            cur_username: '',
+            to_username: '',
+            friends: [],
+            websockect: null,
+            wsUri: "ws://localhost:8080/chat",
+
+        },
+        async created(){
+            await axios.get('/getUsername').then(res=> {
+                curr_username=res.data;
+                this.cur_username=res.data;
+            });
+            $("#chatWith").css("display","none")
+            this.init();
+        },
+        methods:{
+            init(){
+                this.websockect = new WebSocket(this.wsUri);
+                //=号表示左边后端只要触发websocket相关事件，就会执行右边方法；
+                this.websockect.onopen=this.onOpen;
+                this.websockect.onmessage=this.onMessage;
+                this.websockect.onerror=this.onError;
+                this.websockect.onclose=this.onClose;
+            },
+            onOpen(){
+                $('#curr_username').css("color","green").text("在线");
+            },
+            onMessage(event)    {
+                var cu=curr_username;
+                var dataStr=event.data;
+                var res=JSON.parse(dataStr);
+                if (res.systemMsgFlag){
+                    var usernames=res.message;
+                    var friendsListStr="";
+                    var broadcastListStr="";
+                    for(var username of usernames){
+                        if(username!=cu){
+                          friendsListStr +=
+                          "<li><a  onclick='chooseFriend(\"" + username + "\")'>" +
+                              username+ "</a></li>";
+                          broadcastListStr += "<li>"+ username +"上线了"+ "</li>";
+                        }
+                    }
+                    $("#friendsList").html(friendsListStr);
+                    $("#broadcastList").html(broadcastListStr);
+                }
+                else{
+                    var msg=res.message.message;
+                    var fromName=res.fromName;
+                    var cnt = "<div class=\"atalk\"><span id=\"asay\">"+msg+"</span></div>"
+                    if (to_username==fromName){
+                       $("#chatCnt").append(cnt);
+                    }
+                    sessionSaveChat(fromName,cnt);
+
+                }
+            },
+            onClose(){
+                //服务端断开socket连接
+                console.log("断开连接")
+            },
+            onError(){
+                alert("websocket连接失败，请重试")
+            },
+            close(){
+                //客户端主动关闭
+                this.websockect.close();
+                $('#curr_username').css("color","rgba(137,137,137,0.76)").text("离线");
+                $('#off').css("display","none");
+                $('#on').css("display","inline");
+            },
+            open(){
+                //客户端主动连接
+                this.init()
+                $('#curr_username').css("color","green").text("在线");
+                $('#off').css("display","inline");
+                $('#on').css("display","none");
+            },
+            send(){
+                 var msg=$('#tex_content').val();
+                 $('#tex_content').val("");//清空输入框
+                 var cnt = "<div  class=\"btalk\"><span id=\"bsay\">" + msg+ "</span></div>";
+                 $("#chatCnt").append(cnt);
+
+
+                 //编写Message的Json对象
+                 var json={"toName":to_username,"message":msg};
+                 //将Json对象转换成字符串格式
+                 var jsonStr=JSON.stringify(json);
+                 //调用websocket的send()方法发送数据给服务器
+                 this.websockect.send(jsonStr);
+
+                //将聊天记录存储在浏览器
+                 sessionSaveChat(to_username,cnt)
+            }
+
+        },
+    })
+
+
+</script>
+
+</html>
